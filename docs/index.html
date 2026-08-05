@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>월간업무보고 입력폼</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --primary: #1a3a5c;
@@ -115,6 +117,89 @@
     border-bottom: 1.5px solid var(--border);
   }
   .work-block-body { padding: 16px; }
+
+  /* 공간 이용실적 블록 */
+  .usage-space-block {
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .usage-space-header {
+    background: var(--light);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1.5px solid var(--border);
+  }
+  .usage-space-header input {
+    flex: 1;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  .usage-space-body { padding: 16px; }
+  .usage-month-table-wrap { overflow-x: auto; margin-top: 12px; }
+  table.usage-month-table {
+    border-collapse: collapse;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  table.usage-month-table th, table.usage-month-table td {
+    border: 1px solid #ccc;
+    padding: 4px 3px;
+    text-align: center;
+  }
+  table.usage-month-table th { background: var(--light); font-weight: 700; }
+  table.usage-month-table td.row-label { background: var(--light); font-weight: 700; white-space: nowrap; padding: 4px 8px; }
+  table.usage-month-table input {
+    width: 42px;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-size: 12px;
+    padding: 2px;
+  }
+  table.usage-month-table input[readonly] {
+    background: #f0f0f0;
+    color: var(--muted);
+  }
+  table.usage-month-table td.locked { background: #f7f7f7; }
+  table.usage-month-table.dense input { width: 30px; font-size: 11px; }
+  .usage-sync-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 10px 0;
+    flex-wrap: wrap;
+  }
+  .usage-sync-bar button { font-size: 11px; padding: 4px 10px; }
+
+  /* 기관 운영실적(상담) */
+  .counsel-section-block { margin-bottom: 22px; }
+  .counsel-section-title { font-weight: 700; color: var(--primary); margin-bottom: 8px; font-size: 14px; }
+  table.counsel-table {
+    border-collapse: collapse;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  table.counsel-table th, table.counsel-table td {
+    border: 1px solid #ccc;
+    padding: 4px 6px;
+    text-align: center;
+  }
+  table.counsel-table th { background: var(--light); font-weight: 700; }
+  table.counsel-table td.row-label { background: var(--light); font-weight: 700; }
+  table.counsel-table input {
+    width: 52px;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-size: 12px;
+    padding: 2px;
+  }
 
   /* 버튼 */
   .btn {
@@ -318,38 +403,34 @@
     </div>
   </div>
 
-  <!-- 공간 이용실적 -->
+  <!-- 실적 항목 (공간 이용실적 / 시설대관 이용실적 / 기관 운영실적(상담)) -->
   <div class="card">
-    <div class="card-header">□ 공간 이용실적</div>
+    <div class="card-header">
+      □ 실적 항목
+      <span class="badge" id="usage-sync-badge">☁ 저장 안 됨</span>
+    </div>
     <div class="card-body">
-      <div class="form-row single">
+      <p class="hint" id="usage-total-preview">연 누적 이용 인원: 이용실적을 추가하고 인원을 입력하면 자동 계산됩니다</p>
+      <div class="usage-sync-bar">
+        <span>🔒 <b id="usage-report-month-label">보고 월</b> 이전 달 실적은 서버에 저장된 값을 자동으로 불러와 잠급니다.</span>
+        <button class="btn btn-secondary" style="padding:4px 10px;" onclick="unlockPastMonths()">🔓 이전 달 값 수정하기</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;" onclick="loadUsageFromCloud()">🔄 서버에서 다시 불러오기</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;" onclick="saveUsageToCloud()">☁ 지금 저장</button>
+      </div>
+      <div class="form-row" style="align-items:flex-end; margin-top:12px;">
         <div class="form-group">
-          <label>연 누적 이용 인원 (명)</label>
-          <input type="text" id="total-users" placeholder="예: 연 1,871명 이용" />
-          <p class="hint">※ 큰 제목 괄호 안에 들어갈 전체 누적실적을 입력하세요</p>
+          <label>추가할 항목</label>
+          <select id="category-picker">
+            <option value="usage">공간 이용실적</option>
+            <option value="facility">시설대관 이용실적</option>
+            <option value="counsel">기관 운영실적 (상담)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <button class="btn btn-primary" style="padding:10px 20px;" onclick="addReportItem()">＋ 추가</button>
         </div>
       </div>
-      <div id="usage-table-container">
-        <div style="overflow-x:auto; margin-top:12px;">
-          <table id="usage-table" style="width:100%; border-collapse:collapse; font-size:13px;">
-            <thead>
-              <tr style="background:var(--primary); color:white;">
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">구분</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">1월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">2월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">3월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">4월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">5월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">6월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">7월</th>
-                <th style="padding:10px 8px; text-align:center; border:1px solid #ccc;">소계</th>
-              </tr>
-            </thead>
-            <tbody id="usage-tbody"></tbody>
-          </table>
-        </div>
-        <button class="btn btn-add" style="margin-top:12px;" onclick="addUsageRow()">＋ 공간/시설 행 추가</button>
-      </div>
+      <div id="report-items-container"></div>
     </div>
   </div>
 
@@ -428,30 +509,533 @@ function removeWork(type, n) {
   if (el) el.remove();
 }
 
-// ─── 공간 이용실적 행 추가 ───────────────────────────────────
-function addUsageRow() {
-  const n = ++usageRowCount;
-  const tbody = document.getElementById('usage-tbody');
-  const tr = document.createElement('tr');
-  tr.id = `usage-row-${n}`;
-  tr.innerHTML = `
-    <td style="border:1px solid #ccc; padding:6px 4px;">
-      <input type="text" id="usage-name-${n}" placeholder="공간명" style="width:100%; border:none; background:transparent; font-size:13px;" />
-    </td>
-    ${[1,2,3,4,5,6,7].map(m => `
-    <td style="border:1px solid #ccc; padding:6px 4px;">
-      <input type="text" id="usage-m${m}-${n}" placeholder="0" style="width:60px; border:none; background:transparent; font-size:13px; text-align:center;" />
-    </td>`).join('')}
-    <td style="border:1px solid #ccc; padding:6px 4px; text-align:center; color:var(--muted); font-size:12px;">자동</td>
-    <td style="border:1px solid #ccc; padding:4px; text-align:center;">
-      <button class="btn btn-remove" onclick="removeUsageRow(${n})" style="padding:2px 8px; font-size:11px;">✕</button>
-    </td>`;
-  tbody.appendChild(tr);
+// ─── 공간 이용실적 ───────────────────────────────────────────
+const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+let unlockedPastMonths = false;
+
+// 카테고리 선택기에서 고른 종류대로 report-items-container에 새 블록을 하나 추가
+function addReportItem() {
+  const type = document.getElementById('category-picker').value;
+  if (type === 'usage') addUsageSpace();
+  else if (type === 'facility') addFacility();
+  else if (type === 'counsel') addCounselBlock();
+  updateUsageTotalPreview();
 }
 
-function removeUsageRow(n) {
-  const el = document.getElementById(`usage-row-${n}`);
+function addUsageSpace(prefill) {
+  const n = ++usageRowCount;
+  const container = document.getElementById('report-items-container');
+  const div = document.createElement('div');
+  div.className = 'usage-space-block';
+  div.id = `usage-space-${n}`;
+  div.innerHTML = `
+    <div class="usage-space-header">
+      <input type="text" id="usage-center-${n}" placeholder="센터명 (예: 여청센터)" value="${prefill?.centerName ? esc(prefill.centerName) : ''}" style="max-width:140px; flex:none;" />
+      <input type="text" id="usage-name-${n}" placeholder="공간명 (예: 여성회관107)" value="${prefill?.name ? esc(prefill.name) : ''}" />
+      <button class="btn btn-remove" onclick="removeUsageSpace(${n})">✕ 삭제</button>
+    </div>
+    <div class="usage-space-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>목표 인원 (명)</label>
+          <input type="text" id="usage-target-pop-${n}" placeholder="예: 12000" />
+        </div>
+        <div class="form-group">
+          <label>목표 운영일수 (일)</label>
+          <input type="text" id="usage-target-days-${n}" placeholder="예: 240" />
+        </div>
+      </div>
+      <div class="usage-month-table-wrap">
+        <table class="usage-month-table">
+          <thead>
+            <tr><th rowspan="2">구분</th>${MONTHS.map(m => `<th colspan="2">${m}월</th>`).join('')}</tr>
+            <tr>${MONTHS.map(() => `<th>남</th><th>여</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="row-label">인원(명)</td>
+              ${MONTHS.map(m => `
+                <td><input type="text" id="usage-${n}-m${m}-male" placeholder="0" /></td>
+                <td><input type="text" id="usage-${n}-m${m}-female" placeholder="0" /></td>
+              `).join('')}
+            </tr>
+            <tr>
+              <td class="row-label">운영일수(일)</td>
+              ${MONTHS.map(m => `<td colspan="2"><input type="text" id="usage-${n}-m${m}-days" placeholder="0" /></td>`).join('')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  container.appendChild(div);
+  applyMonthLocking();
+  return n;
+}
+
+function removeUsageSpace(n) {
+  const el = document.getElementById(`usage-space-${n}`);
   if (el) el.remove();
+  updateUsageTotalPreview();
+}
+
+// 보고 월보다 이전 달은 서버에서 불러온 값 그대로 잠가서 실수로 덮어쓰지 않게 함
+function applyMonthLocking() {
+  const month = parseInt(document.getElementById('month').value, 10) || 0;
+  const label = document.getElementById('usage-report-month-label');
+  if (label) label.textContent = month ? `${month}월` : '보고 월';
+  document.querySelectorAll('.usage-space-block:not(.facility-block)').forEach(block => {
+    const n = block.id.replace('usage-space-', '');
+    MONTHS.forEach(m => {
+      const locked = month > 0 && m < month && !unlockedPastMonths;
+      ['male', 'female', 'days'].forEach(field => {
+        const input = document.getElementById(`usage-${n}-m${m}-${field}`);
+        if (input) input.readOnly = locked;
+      });
+    });
+  });
+  document.querySelectorAll('.facility-block').forEach(block => {
+    const f = block.id.replace('facility-', '');
+    MONTHS.forEach(m => {
+      const locked = month > 0 && m < month && !unlockedPastMonths;
+      RENTAL_ROWS.forEach(row => RENTAL_COLS.forEach(col => {
+        const input = document.getElementById(`facility-${f}-m${m}-${row.key}-${col.key}`);
+        if (input) input.readOnly = locked;
+      }));
+    });
+  });
+}
+
+function unlockPastMonths() {
+  unlockedPastMonths = true;
+  applyMonthLocking();
+  showToast('이전 달 값을 수정할 수 있어요. 저장하면 서버 값도 함께 바뀝니다.');
+}
+
+function collectUsageItems() {
+  const items = [];
+  document.querySelectorAll('#report-items-container > .usage-space-block:not(.facility-block)').forEach(block => {
+    const n = block.id.replace('usage-space-', '');
+    const name = document.getElementById(`usage-name-${n}`)?.value.trim();
+    if (!name) return;
+    const centerName = document.getElementById(`usage-center-${n}`)?.value.trim() || '';
+    const months = {};
+    MONTHS.forEach(m => {
+      months[m] = {
+        male: document.getElementById(`usage-${n}-m${m}-male`)?.value.trim() || '',
+        female: document.getElementById(`usage-${n}-m${m}-female`)?.value.trim() || '',
+        days: document.getElementById(`usage-${n}-m${m}-days`)?.value.trim() || '',
+      };
+    });
+    items.push({
+      centerName, name,
+      targetPop: document.getElementById(`usage-target-pop-${n}`)?.value.trim() || '',
+      targetDays: document.getElementById(`usage-target-days-${n}`)?.value.trim() || '',
+      months,
+    });
+  });
+  return items;
+}
+
+function sumUsers(spaces) {
+  return spaces.reduce((s, sp) =>
+    s + MONTHS.reduce((ss, m) => ss + (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0), 0), 0);
+}
+
+// ─── 시설대관 이용실적: 유료/무료대관 x 청소년/청소년 외 x 남/여 ─────
+const RENTAL_ROWS = [
+  { key: 'paid', label: '유료대관' },
+  { key: 'free', label: '무료대관' },
+];
+const RENTAL_COLS = [
+  { key: 'youthMale', label1: '청소년', label2: '남' },
+  { key: 'youthFemale', label1: '청소년', label2: '여' },
+  { key: 'otherMale', label1: '청소년 외', label2: '남' },
+  { key: 'otherFemale', label1: '청소년 외', label2: '여' },
+];
+
+let facilityCounter = 0;
+
+function addFacility(prefill) {
+  const f = ++facilityCounter;
+  const container = document.getElementById('report-items-container');
+  const div = document.createElement('div');
+  div.className = 'usage-space-block facility-block';
+  div.id = `facility-${f}`;
+  div.innerHTML = `
+    <div class="usage-space-header">
+      <input type="text" id="facility-center-${f}" placeholder="센터명 (예: 소사)" value="${prefill?.centerName ? esc(prefill.centerName) : ''}" style="max-width:140px; flex:none;" />
+      <input type="text" id="facility-name-${f}" placeholder="시설명 (예: 시설대관)" value="${prefill?.name ? esc(prefill.name) : '시설대관'}" />
+      <button class="btn btn-remove" onclick="removeFacility(${f})">✕ 삭제</button>
+    </div>
+    <div class="usage-space-body">
+      <div class="usage-month-table-wrap">
+        <table class="usage-month-table dense">
+          <thead>
+            <tr><th rowspan="3">항목</th>${MONTHS.map(m => `<th colspan="4">${m}월</th>`).join('')}</tr>
+            <tr>${MONTHS.map(() => `<th colspan="2">청소년</th><th colspan="2">청소년 외</th>`).join('')}</tr>
+            <tr>${MONTHS.map(() => `<th>남</th><th>여</th><th>남</th><th>여</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${RENTAL_ROWS.map(row => `
+            <tr>
+              <td class="row-label">${row.label}</td>
+              ${MONTHS.map(m => RENTAL_COLS.map(col =>
+                `<td><input type="text" id="facility-${f}-m${m}-${row.key}-${col.key}" placeholder="0" /></td>`
+              ).join('')).join('')}
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  container.appendChild(div);
+  applyMonthLocking();
+  return f;
+}
+
+function removeFacility(f) {
+  const el = document.getElementById(`facility-${f}`);
+  if (el) el.remove();
+  updateUsageTotalPreview();
+}
+
+function collectFacilityItems() {
+  const items = [];
+  document.querySelectorAll('#report-items-container > .facility-block').forEach(block => {
+    const f = block.id.replace('facility-', '');
+    const name = document.getElementById(`facility-name-${f}`)?.value.trim();
+    if (!name) return;
+    const centerName = document.getElementById(`facility-center-${f}`)?.value.trim() || '';
+    const months = {};
+    MONTHS.forEach(m => {
+      months[m] = {};
+      RENTAL_ROWS.forEach(row => {
+        months[m][row.key] = {};
+        RENTAL_COLS.forEach(col => {
+          months[m][row.key][col.key] = document.getElementById(`facility-${f}-m${m}-${row.key}-${col.key}`)?.value.trim() || '';
+        });
+      });
+    });
+    items.push({ centerName, name, months });
+  });
+  return items;
+}
+
+function sumFacilityUsers(facilities) {
+  return facilities.reduce((s, fac) =>
+    s + MONTHS.reduce((ss, m) =>
+      ss + RENTAL_ROWS.reduce((sss, row) =>
+        sss + RENTAL_COLS.reduce((ssss, col) => ssss + (parseInt(fac.months[m][row.key][col.key]) || 0), 0), 0), 0), 0);
+}
+
+// 이용실적/대관실적 항목을 입력한 센터명(문자열)이 같은 것끼리 묶어서
+// 표를 그릴 그룹 배열을 만든다. 센터명을 안 적으면 ''(빈 이름) 그룹으로 묶인다.
+function groupByCenterName(usageItems, facilityItems) {
+  const order = [];
+  const map = {};
+  const ensure = (name) => {
+    const key = name || '';
+    if (!map[key]) { map[key] = { centerName: key, spaces: [], facilities: [] }; order.push(key); }
+    return map[key];
+  };
+  usageItems.forEach(it => ensure(it.centerName).spaces.push(it));
+  facilityItems.forEach(it => ensure(it.centerName).facilities.push(it));
+  return order.map(k => map[k]);
+}
+
+function updateUsageTotalPreview() {
+  const grand = sumUsers(collectUsageItems());
+  const el = document.getElementById('usage-total-preview');
+  if (el) el.textContent = `전체 연 누적 이용 인원(자동 계산): ${grand.toLocaleString()}명`;
+}
+
+// ─── Firebase(Firestore) 연동: 기관명별로 저장/불러오기 ────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDeTYPmPHGQdwwazFRKeD2rbifSyetvzuc",
+  authDomain: "bwyf-5a071.firebaseapp.com",
+  projectId: "bwyf-5a071",
+  storageBucket: "bwyf-5a071.firebasestorage.app",
+  messagingSenderId: "747035511157",
+  appId: "1:747035511157:web:026281281b30d8be556b3c",
+  measurementId: "G-T43V9M2L65"
+};
+let db = null;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+} catch (e) {
+  console.error('Firebase 초기화 실패:', e);
+}
+
+function orgDocId(dept) {
+  const id = (dept || '').trim().replace(/[\/\s]+/g, '_').slice(0, 200);
+  return id || null;
+}
+
+function setSyncBadge(text, isError) {
+  const el = document.getElementById('usage-sync-badge');
+  if (!el) return;
+  el.textContent = text;
+  el.style.background = isError ? 'rgba(192,57,43,0.35)' : 'rgba(255,255,255,0.2)';
+}
+
+async function loadUsageFromCloud() {
+  const dept = document.getElementById('dept').value.trim();
+  const docId = orgDocId(dept);
+  if (!docId || !db) { setSyncBadge('☁ 저장 안 됨', false); return; }
+  setSyncBadge('🔄 불러오는 중…', false);
+  unlockedPastMonths = false;
+  try {
+    const snap = await db.collection('orgs').doc(docId).get();
+    document.getElementById('report-items-container').innerHTML = '';
+    if (snap.exists) {
+      const data = snap.data();
+      (data.usageItems || []).forEach(it => {
+        const n = addUsageSpace({ centerName: it.centerName, name: it.name });
+        document.getElementById(`usage-target-pop-${n}`).value = it.targetPop || '';
+        document.getElementById(`usage-target-days-${n}`).value = it.targetDays || '';
+        MONTHS.forEach(m => {
+          const md = (it.months && it.months[m]) || {};
+          const male = document.getElementById(`usage-${n}-m${m}-male`);
+          const female = document.getElementById(`usage-${n}-m${m}-female`);
+          const days = document.getElementById(`usage-${n}-m${m}-days`);
+          if (male) male.value = md.male || '';
+          if (female) female.value = md.female || '';
+          if (days) days.value = md.days || '';
+        });
+      });
+      (data.facilityItems || []).forEach(it => {
+        const f = addFacility({ centerName: it.centerName, name: it.name });
+        MONTHS.forEach(m => {
+          const md = (it.months && it.months[m]) || {};
+          RENTAL_ROWS.forEach(row => RENTAL_COLS.forEach(col => {
+            const input = document.getElementById(`facility-${f}-m${m}-${row.key}-${col.key}`);
+            if (input) input.value = (md[row.key] && md[row.key][col.key]) || '';
+          }));
+        });
+      });
+      (data.counselBlocks || []).forEach(blk => {
+        const c = addCounselBlock({ period: blk.period });
+        COUNSEL_SECTIONS.forEach(section => {
+          const secData = (blk.sections && blk.sections[section.key]) || {};
+          section.rows.forEach(row => section.colGroups.forEach(g => g.cols.forEach(col => {
+            const input = document.getElementById(counselCellId(c, section.key, row.key, col.key));
+            if (input) input.value = (secData[row.key] && secData[row.key][col.key]) || '';
+          })));
+        });
+      });
+      if (!(data.usageItems || []).length && !(data.facilityItems || []).length && !(data.counselBlocks || []).length) {
+        addUsageSpace();
+      }
+      setSyncBadge('☁ 서버 데이터 불러옴', false);
+    } else {
+      addUsageSpace();
+      setSyncBadge('☁ 저장된 데이터 없음 (신규 기관)', false);
+    }
+  } catch (e) {
+    console.error(e);
+    addUsageSpace();
+    setSyncBadge('⚠ 불러오기 실패', true);
+  }
+  applyMonthLocking();
+  updateUsageTotalPreview();
+}
+
+async function saveUsageToCloud() {
+  const dept = document.getElementById('dept').value.trim();
+  const docId = orgDocId(dept);
+  if (!docId || !db) { setSyncBadge('⚠ 기관명을 입력해야 저장돼요', true); return false; }
+  const usageItems = collectUsageItems();
+  const facilityItems = collectFacilityItems();
+  const counselBlocks = collectCounselBlocks();
+  try {
+    await db.collection('orgs').doc(docId).set({
+      usageItems, facilityItems, counselBlocks,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    setSyncBadge('✅ 서버에 저장됨', false);
+    return true;
+  } catch (e) {
+    console.error(e);
+    setSyncBadge('⚠ 저장 실패', true);
+    return false;
+  }
+}
+
+// ─── 기관 운영실적(상담): 표마다 구분(행)·항목(열)이 달라서 설정으로 관리 ──
+// 모든 표는 합계/전체를 나타내는 행에 key:'total'을 두기로 통일해서,
+// "총 N명/건" 같은 헤드라인 숫자를 rowTotal(section, data.total)로 일관되게 뽑는다.
+const COUNSEL_SECTIONS = [
+  {
+    key: 'caseMgmt', no: '①', title: '사례관리 현황', unit: '명',
+    rows: [{ key: 'male', label: '남성' }, { key: 'female', label: '여성' }, { key: 'total', label: '합계' }],
+    colGroups: [
+      { label: '전체 사례관리 인원수', cols: [
+        { key: 'totalAll', label: '전체인원' }, { key: 'case', label: '사례관리' }, { key: 'follow', label: '사후관리' }, { key: 'closed', label: '사례전체종결' },
+      ]},
+      { label: '실 사례관리 인원수', cols: [
+        { key: 'totalReal', label: '전체인원' }, { key: 'caseReal', label: '사례관리' }, { key: 'followReal', label: '사후관리' }, { key: 'closedReal', label: '사례전체종결' },
+      ]},
+    ],
+    headlineCol: 'totalAll',
+  },
+  {
+    key: 'support', no: '②', title: '지원서비스 현황', unit: '건',
+    rows: [{ key: 'total', label: '기간' }],
+    colGroups: [{ label: '', cols: [
+      { key: 'counsel', label: '상담심리지원' }, { key: 'health', label: '건강지원' }, { key: 'housing', label: '주거지원' },
+      { key: 'protect', label: '보호지원' }, { key: 'living', label: '생활지원' }, { key: 'care', label: '돌봄지원' },
+      { key: 'edu', label: '교육지원' }, { key: 'selfrely', label: '자립지원' }, { key: 'legal', label: '법률지원' },
+      { key: 'safety', label: '안전지원' }, { key: 'activity', label: '활동지원' }, { key: 'after', label: '사후지원' },
+    ]}],
+  },
+  {
+    key: 'problemType', no: '③', title: '문제유형별 청소년상담', unit: '명',
+    rows: [{ key: 'male', label: '남성' }, { key: 'female', label: '여성' }, { key: 'total', label: '합계' }],
+    colGroups: [{ label: '', cols: [
+      { key: 'dropout', label: '학교중단' }, { key: 'homeless', label: '가정밖' }, { key: 'relation', label: '대인관계' },
+      { key: 'career', label: '학업·진로' }, { key: 'addiction', label: '과의존·중독' }, { key: 'mental', label: '정신건강' },
+      { key: 'violenceV', label: '폭력피해' }, { key: 'violulentP', label: '폭력가해·비행' }, { key: 'sex', label: '성' },
+      { key: 'labor', label: '노동·근로' }, { key: 'poverty', label: '결핍·빈곤' }, { key: 'health2', label: '신체건강·인식' },
+      { key: 'migrant', label: '이주배경' },
+    ]}],
+  },
+  {
+    key: 'effectiveness', no: '④', title: '효과성 평가 및 서비스 만족도', unit: '건',
+    rows: [{ key: 'male', label: '남성' }, { key: 'female', label: '여성' }, { key: 'total', label: '합계' }],
+    colGroups: [
+      { label: '평가사례수', cols: [{ key: 'evalCases', label: '평가사례수' }, { key: 'up', label: '증가' }, { key: 'same', label: '동일' }, { key: 'down', label: '감소' }] },
+      { label: '변화점수', cols: [{ key: 'pre', label: '사전평균' }, { key: 'post', label: '사후평균' }, { key: 'diff', label: '증감점수' }, { key: 'rate', label: '증감율(%)' }] },
+      { label: '서비스만족도', cols: [{ key: 'raw', label: '원점수' }, { key: 'conv', label: '환산점수' }] },
+    ],
+    headlineCol: 'evalCases',
+  },
+  {
+    key: 'outCaseMgmt', no: '⑤', title: '학교밖청소년 사례관리 현황', unit: '명(실)',
+    rows: [{ key: 'male', label: '남성' }, { key: 'female', label: '여성' }, { key: 'total', label: '합계' }],
+    colGroups: [{ label: '', cols: [
+      { key: 'totalP', label: '전체인원' }, { key: 'newCase', label: '신규사례' }, { key: 'ongoing', label: '지속사례' },
+      { key: 'case', label: '사례관리' }, { key: 'closed', label: '사례종결' }, { key: 'follow', label: '사후관리' },
+    ]}],
+    headlineCol: 'totalP',
+  },
+  {
+    key: 'outSupport', no: '⑥', title: '학교 밖 청소년 지원서비스 현황', unit: '건(연)',
+    rows: [{ key: 'total', label: '기간' }],
+    colGroups: [
+      { label: '학교밖청소년지원사업', cols: [
+        { key: 'counsel', label: '상담심리지원' }, { key: 'health', label: '건강지원' }, { key: 'protect', label: '보호지원' },
+        { key: 'living', label: '생활지원' }, { key: 'edu', label: '교육지원' }, { key: 'selfrely', label: '자립지원' }, { key: 'activity', label: '활동지원' },
+      ]},
+      { label: '맞춤형학교밖청소년지원사업', cols: [
+        { key: 'learn', label: '학습지원' }, { key: 'welfare', label: '복지지원' }, { key: 'selfrely2', label: '자립지원' },
+        { key: 'mental', label: '정신건강' }, { key: 'activity2', label: '활동지원' }, { key: 'allowance', label: '자립수당지원' },
+      ]},
+    ],
+  },
+  {
+    key: 'selfReliance', no: '⑦', title: '학교 밖 청소년 자립성취도', unit: '명',
+    rows: [{ key: 'total', label: '전체' }],
+    colGroups: [
+      { label: '학업복귀', cols: [
+        { key: 'reg', label: '정규학교' }, { key: 'upper', label: '상급학교' }, { key: 'broadcast', label: '방송통신' },
+        { key: 'certAcademic', label: '학력인정' }, { key: 'gedExam', label: '검정고시' }, { key: 'readapt', label: '학교재적응' }, { key: 'college', label: '대학진학' },
+      ]},
+      { label: '사회진입', cols: [
+        { key: 'startup', label: '창업' }, { key: 'job', label: '취업' }, { key: 'training', label: '직업훈련' }, { key: 'cert', label: '자격취득' },
+      ]},
+      { label: '자립역량향상', cols: [
+        { key: 'selfdev', label: '자기계발' }, { key: 'careerExp', label: '진로체험' }, { key: 'award', label: '수상경력' },
+      ]},
+    ],
+  },
+];
+
+// c는 이 화면에 추가된 "기관 운영실적(상담)" 블록의 인스턴스 번호 —
+// 같은 보고서에 기간이 다른 상담실적을 여러 번 추가할 수 있게 ID에 포함시킨다
+function counselCellId(c, sectionKey, rowKey, colKey) {
+  return `counsel-${c}-${sectionKey}-${rowKey}-${colKey}`;
+}
+
+function buildCounselSectionInputHTML(c, section) {
+  const groupHeaderRow = section.colGroups.some(g => g.label)
+    ? `<tr><th></th>${section.colGroups.map(g => `<th colspan="${g.cols.length}">${g.label}</th>`).join('')}</tr>`
+    : '';
+  const colHeaderRow = `<tr><th>구분</th>${section.colGroups.map(g => g.cols.map(c2 => `<th>${c2.label}</th>`).join('')).join('')}</tr>`;
+  const bodyRows = section.rows.map(row => `
+    <tr>
+      <td class="row-label">${row.label}</td>
+      ${section.colGroups.map(g => g.cols.map(c2 =>
+        `<td><input type="text" id="${counselCellId(c, section.key, row.key, c2.key)}" placeholder="0" /></td>`
+      ).join('')).join('')}
+    </tr>`).join('');
+  return `
+    <div class="counsel-section-block" id="counsel-section-${c}-${section.key}">
+      <div class="counsel-section-title">${section.no} ${section.title}</div>
+      <div class="usage-month-table-wrap">
+        <table class="counsel-table">
+          <thead>${groupHeaderRow}${colHeaderRow}</thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+let counselBlockCounter = 0;
+
+function addCounselBlock(prefill) {
+  const c = ++counselBlockCounter;
+  const container = document.getElementById('report-items-container');
+  const div = document.createElement('div');
+  div.className = 'usage-space-block counsel-block';
+  div.id = `counsel-block-${c}`;
+  div.innerHTML = `
+    <div class="usage-space-header">
+      <input type="text" id="counsel-period-${c}" placeholder="집계 기간 (예: 1~4월)" value="${prefill?.period ? esc(prefill.period) : '1~4월'}" />
+      <button class="btn btn-remove" onclick="removeCounselBlock(${c})">✕ 삭제</button>
+    </div>
+    <div class="usage-space-body">
+      ${COUNSEL_SECTIONS.map(section => buildCounselSectionInputHTML(c, section)).join('')}
+    </div>`;
+  container.appendChild(div);
+  return c;
+}
+
+function removeCounselBlock(c) {
+  const el = document.getElementById(`counsel-block-${c}`);
+  if (el) el.remove();
+}
+
+function collectCounselSection(c, section) {
+  const data = {};
+  section.rows.forEach(row => {
+    data[row.key] = {};
+    section.colGroups.forEach(g => g.cols.forEach(c2 => {
+      data[row.key][c2.key] = document.getElementById(counselCellId(c, section.key, row.key, c2.key))?.value.trim() || '';
+    }));
+  });
+  return data;
+}
+
+// {period, sections:{sectionKey: {rowKey:{colKey:value}}}} 형태로, 화면에 추가된
+// 상담실적 블록마다 하나씩 모아서 배열로 돌려준다 (기간이 다른 여러 개 추가 가능)
+function collectCounselBlocks() {
+  const blocks = [];
+  document.querySelectorAll('#report-items-container > .counsel-block').forEach(block => {
+    const c = block.id.replace('counsel-block-', '');
+    const period = document.getElementById(`counsel-period-${c}`)?.value.trim() || '';
+    const sections = {};
+    COUNSEL_SECTIONS.forEach(section => { sections[section.key] = collectCounselSection(c, section); });
+    blocks.push({ period, sections });
+  });
+  return blocks;
+}
+
+// 한 행(row)의 모든 항목 값을 합산 — "총 N명/건" 헤드라인 숫자에 사용
+function rowTotal(section, rowData) {
+  if (!rowData) return 0;
+  let sum = 0;
+  section.colGroups.forEach(g => g.cols.forEach(c => { sum += parseInt(rowData[c.key]) || 0; }));
+  return sum;
 }
 
 // ─── 데이터 수집 ─────────────────────────────────────────────
@@ -480,23 +1064,20 @@ function collectData() {
     return works;
   };
 
-  const usageRows = [];
-  for (let i = 1; i <= usageRowCount; i++) {
-    const el = document.getElementById(`usage-row-${i}`);
-    if (!el) continue;
-    const name = document.getElementById(`usage-name-${i}`)?.value.trim();
-    if (!name) continue;
-    const months = [1,2,3,4,5,6,7].map(m => document.getElementById(`usage-m${m}-${i}`)?.value.trim() || '');
-    usageRows.push({ name, months });
-  }
+  const usageItems = collectUsageItems();
+  const facilityItems = collectFacilityItems();
+  const usageGroups = groupByCenterName(usageItems, facilityItems);
+  const grandTotal = sumUsers(usageItems);
+  const totalUsers = usageItems.length ? `연 ${grandTotal.toLocaleString()}명 이용` : '';
 
   return {
     dept, month, author, writeDate,
-    totalUsers: document.getElementById('total-users').value.trim(),
+    totalUsers,
     coreWorks: collectWorks('core'),
     orgWorks: collectWorks('org'),
     bizWorks: collectWorks('biz'),
-    usageRows,
+    usageGroups,
+    counselBlocks: collectCounselBlocks(),
   };
 }
 
@@ -512,6 +1093,180 @@ function togglePreview() {
   area.style.display = 'block';
   area.innerHTML = buildPreviewHTML(d);
   area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fmtNum(n) {
+  return n ? n.toLocaleString() : '';
+}
+
+// 공간 이용실적을 서식과 동일하게 3개 표로 구성: 공간별 이용실적 / 공간 이용실적 총합 / 총 누계 및 목표대비실적
+// (센터 하나 분량. 센터가 여러 개면 센터마다 이 함수를 한 번씩 호출해서 이어붙인다)
+function buildUsageTablesForSpaces(spaces) {
+  if (!spaces.length) return '';
+  const TH = 'border:1px solid #ccc;padding:4px;text-align:center;background:#f0f4f8;font-size:11px;';
+  const TD = 'border:1px solid #ccc;padding:4px;text-align:center;font-size:11px;';
+  const monthHeader = `
+    <tr><th style="${TH}" rowspan="2">구분</th>${MONTHS.map(m => `<th style="${TH}" colspan="2">${m}월</th>`).join('')}</tr>
+    <tr>${MONTHS.map(() => `<th style="${TH}">남</th><th style="${TH}">여</th>`).join('')}</tr>`;
+
+  const spaceRowGroup = (name, monthsData) => {
+    const popRow = MONTHS.map(m => `<td style="${TD}">${fmtNum(parseInt(monthsData[m].male) || 0) || ''}</td><td style="${TD}">${fmtNum(parseInt(monthsData[m].female) || 0) || ''}</td>`).join('');
+    const dayRow = MONTHS.map(m => `<td style="${TD}" colspan="2">${fmtNum(parseInt(monthsData[m].days) || 0) || ''}</td>`).join('');
+    return `
+      <tr><td style="${TD}font-weight:700;" rowspan="2">${name}</td><td style="${TD}font-weight:700;">인원(명)</td>${popRow}</tr>
+      <tr><td style="${TD}font-weight:700;">운영일수(일)</td>${dayRow}</tr>`;
+  };
+
+  // 표1: 공간별 이용실적
+  const table1 = `
+    <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+      <caption style="text-align:left;font-weight:700;background:#333;color:#fff;padding:6px;">공간별 이용실적</caption>
+      <thead>${monthHeader}</thead>
+      <tbody>${spaces.map(sp => spaceRowGroup(sp.name, sp.months)).join('')}</tbody>
+    </table>`;
+
+  // 표2: 공간 이용실적 총합 (해당 센터 내 모든 공간의 월별 합계)
+  const totalMonths = {};
+  MONTHS.forEach(m => {
+    totalMonths[m] = {
+      male: spaces.reduce((s, sp) => s + (parseInt(sp.months[m].male) || 0), 0),
+      female: spaces.reduce((s, sp) => s + (parseInt(sp.months[m].female) || 0), 0),
+      days: spaces.reduce((s, sp) => s + (parseInt(sp.months[m].days) || 0), 0),
+    };
+  });
+  const table2 = `
+    <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+      <caption style="text-align:left;font-weight:700;background:#333;color:#fff;padding:6px;">공간 이용실적 총합</caption>
+      <thead>${monthHeader}</thead>
+      <tbody>${spaceRowGroup('합계', totalMonths)}</tbody>
+    </table>`;
+
+  // 표3: 총 누계 및 목표대비실적 (공간별 목표 대비 누계실적/달성도)
+  const table3Rows = spaces.map(sp => {
+    const popSum = MONTHS.reduce((s, m) => s + (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0), 0);
+    const daySum = MONTHS.reduce((s, m) => s + (parseInt(sp.months[m].days) || 0), 0);
+    const targetPop = parseInt(sp.targetPop) || 0;
+    const targetDays = parseInt(sp.targetDays) || 0;
+    const popRate = targetPop ? (popSum / targetPop * 100).toFixed(2) : '0.00';
+    const dayRate = targetDays ? (daySum / targetDays * 100).toFixed(2) : '0.00';
+    return `
+      <tr>
+        <td style="${TD}font-weight:700;" rowspan="1">${sp.name}</td>
+        <td style="${TD}">목표</td><td style="${TD}">${fmtNum(targetPop)}</td>
+        <td style="${TD}">목표</td><td style="${TD}">${fmtNum(targetDays)}</td>
+      </tr>
+      <tr>
+        <td style="${TD}"></td>
+        <td style="${TD}">누계실적</td><td style="${TD}">${fmtNum(popSum)}</td>
+        <td style="${TD}">누계실적</td><td style="${TD}">${fmtNum(daySum)}</td>
+      </tr>
+      <tr>
+        <td style="${TD}"></td>
+        <td style="${TD}">달성도(%)</td><td style="${TD}">${popRate}</td>
+        <td style="${TD}">달성도(%)</td><td style="${TD}">${dayRate}</td>
+      </tr>`;
+  }).join('');
+  const table3 = `
+    <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+      <caption style="text-align:left;font-weight:700;background:#333;color:#fff;padding:6px;">총 누계 및 목표대비실적</caption>
+      <thead><tr>
+        <th style="${TH}">공간 명</th><th style="${TH}" colspan="2">구분 (인원)</th><th style="${TH}" colspan="2">구분 (운영일수)</th>
+      </tr></thead>
+      <tbody>${table3Rows}</tbody>
+    </table>`;
+
+  return `${table1}${table2}${table3}`;
+}
+
+// 센터가 여러 개면 "(센터명)" 표시와 함께 센터별로 3개 표를 반복
+// 시설대관 이용실적: 유료/무료대관 x 청소년/청소년 외 x 남/여 + 소계/합계 자동 계산
+function buildFacilityTableHTML(facilities) {
+  if (!facilities.length) return '';
+  const TH = 'border:1px solid #ccc;padding:4px;text-align:center;background:#f0f4f8;font-size:11px;';
+  const TD = 'border:1px solid #ccc;padding:4px;text-align:center;font-size:11px;';
+  return facilities.map(fac => {
+    const header = `
+      <tr><th style="${TH}" rowspan="3">항목</th>${MONTHS.map(m => `<th style="${TH}" colspan="4">${m}월</th>`).join('')}</tr>
+      <tr>${MONTHS.map(() => `<th style="${TH}" colspan="2">청소년</th><th style="${TH}" colspan="2">청소년 외</th>`).join('')}</tr>
+      <tr>${MONTHS.map(() => `<th style="${TH}">남</th><th style="${TH}">여</th><th style="${TH}">남</th><th style="${TH}">여</th>`).join('')}</tr>`;
+    const rentalRow = (rowKey, label) => `
+      <tr><td style="${TD}font-weight:700;">${label}</td>${MONTHS.map(m => RENTAL_COLS.map(col => {
+        const v = parseInt(fac.months[m][rowKey][col.key]) || 0;
+        return `<td style="${TD}">${v || ''}</td>`;
+      }).join('')).join('')}</tr>`;
+    const subtotalRow = `
+      <tr><td style="${TD}font-weight:700;">소계</td>${MONTHS.map(m => RENTAL_COLS.map(col => {
+        const v = RENTAL_ROWS.reduce((s, row) => s + (parseInt(fac.months[m][row.key][col.key]) || 0), 0);
+        return `<td style="${TD}">${v || ''}</td>`;
+      }).join('')).join('')}</tr>`;
+    const totalRow = `
+      <tr><td style="${TD}font-weight:700;">합계</td>${MONTHS.map(m => {
+        const v = RENTAL_ROWS.reduce((s, row) => s + RENTAL_COLS.reduce((ss, col) => ss + (parseInt(fac.months[m][row.key][col.key]) || 0), 0), 0);
+        return `<td style="${TD}font-weight:700;" colspan="4">${v || ''}</td>`;
+      }).join('')}</tr>`;
+    return `
+      <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+        <caption style="text-align:left;font-weight:700;background:#333;color:#fff;padding:6px;">${fac.name}</caption>
+        <thead>${header}</thead>
+        <tbody>${rentalRow('paid', '유료대관')}${rentalRow('free', '무료대관')}${subtotalRow}${totalRow}</tbody>
+      </table>`;
+  }).join('');
+}
+
+function buildUsageTablesHTML(d) {
+  if (!d.usageGroups.length) return '';
+  const multi = d.usageGroups.length > 1;
+  const blocks = d.usageGroups.map(grp => {
+    let out = '';
+    if (grp.spaces.length) {
+      const sum = sumUsers(grp.spaces);
+      const label = multi
+        ? `<div style="font-style:italic;font-weight:700;margin-top:16px;">(${grp.centerName || '센터명 미입력'}) — 연 ${sum.toLocaleString()}명 이용</div>`
+        : '';
+      out += label + buildUsageTablesForSpaces(grp.spaces);
+    }
+    if (grp.facilities && grp.facilities.length) {
+      const fsum = sumFacilityUsers(grp.facilities);
+      out += `<div class="section-title" style="margin-top:16px;">□ 시설대관 이용실적 (연 ${fsum.toLocaleString()}명 이용)${multi ? ` (${grp.centerName || '센터명 미입력'})` : ''}</div>`;
+      out += buildFacilityTableHTML(grp.facilities);
+    }
+    return out;
+  }).join('');
+  return `<div style="overflow-x:auto;">${blocks}</div>`;
+}
+
+// 기관 운영실적(상담) 7개 표를 사진과 동일한 구조로 렌더링
+function buildCounselTablesHTML(d) {
+  if (!d.counselBlocks || !d.counselBlocks.length) return '';
+  const TH = 'border:1px solid #ccc;padding:4px;text-align:center;background:#f0f4f8;font-size:11px;';
+  const TD = 'border:1px solid #ccc;padding:4px;text-align:center;font-size:11px;';
+  return d.counselBlocks.map(blk => {
+    const tables = COUNSEL_SECTIONS.map(section => {
+      const data = blk.sections[section.key] || {};
+      const headlineVal = section.headlineCol
+        ? (parseInt(data.total?.[section.headlineCol]) || 0)
+        : rowTotal(section, data.total);
+      const groupHeaderRow = section.colGroups.some(g => g.label)
+        ? `<tr><th style="${TH}"></th>${section.colGroups.map(g => `<th style="${TH}" colspan="${g.cols.length}">${g.label}</th>`).join('')}</tr>`
+        : '';
+      const colHeaderRow = `<tr><th style="${TH}">구분</th>${section.colGroups.map(g => g.cols.map(c => `<th style="${TH}">${c.label}</th>`).join('')).join('')}</tr>`;
+      const bodyRows = section.rows.map(row => `
+        <tr>
+          <td style="${TD}font-weight:700;">${row.label}</td>
+          ${section.colGroups.map(g => g.cols.map(c => {
+            const v = parseInt(data[row.key]?.[c.key]) || 0;
+            return `<td style="${TD}">${v ? fmtNum(v) : ''}</td>`;
+          }).join('')).join('')}
+        </tr>`).join('');
+      return `
+        <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+          <caption style="text-align:left;font-weight:700;background:#333;color:#fff;padding:6px;">${section.no} ${section.title}: 총 ${fmtNum(headlineVal)}${section.unit}</caption>
+          <thead>${groupHeaderRow}${colHeaderRow}</thead>
+          <tbody>${bodyRows}</tbody>
+        </table>`;
+    }).join('');
+    return `<div class="section-title" style="margin-top:16px;">□ 기관 운영실적 (상담) — ${blk.period || ''}</div><div style="overflow-x:auto;">${tables}</div>`;
+  }).join('');
 }
 
 function buildPreviewHTML(d) {
@@ -546,22 +1301,8 @@ function buildPreviewHTML(d) {
     ${d.coreWorks.length ? `<div class="section-title">□ 월간 핵심 주요업무</div>${renderWorks(d.coreWorks)}` : ''}
     ${d.orgWorks.length ? `<div class="section-title">□ 기관운영</div>${renderWorks(d.orgWorks)}` : ''}
     ${d.bizWorks.length ? `<div class="section-title">□ 사업운영</div>${renderBizWorks(d.bizWorks)}` : ''}
-    ${d.usageRows.length ? `<div class="section-title">□ 공간 이용실적${d.totalUsers ? ` (${d.totalUsers})` : ''}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;">
-      <thead><tr style="background:#f0f4f8;">
-        <th style="border:1px solid #ccc;padding:8px;text-align:center;">구분</th>
-        ${[1,2,3,4,5,6,7].map(m=>`<th style="border:1px solid #ccc;padding:8px;text-align:center;">${m}월</th>`).join('')}
-        <th style="border:1px solid #ccc;padding:8px;text-align:center;">소계</th>
-      </tr></thead>
-      <tbody>${d.usageRows.map(r => {
-        const total = r.months.reduce((s,v) => s + (parseInt(v)||0), 0);
-        return `<tr>
-          <td style="border:1px solid #ccc;padding:8px;text-align:center;font-weight:700;">${r.name}</td>
-          ${r.months.map(v=>`<td style="border:1px solid #ccc;padding:8px;text-align:center;">${v||''}</td>`).join('')}
-          <td style="border:1px solid #ccc;padding:8px;text-align:center;font-weight:700;">${total||''}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>` : ''}
+    ${d.usageGroups.length ? `<div class="section-title">□ 공간 이용실적${d.totalUsers ? ` (${d.totalUsers})` : ''}</div>${buildUsageTablesHTML(d)}` : ''}
+    ${d.counselBlocks && d.counselBlocks.length ? buildCounselTablesHTML(d) : ''}
     ${d.author || d.writeDate ? `<div style="text-align:right;margin-top:24px;color:var(--muted);font-size:13px;">작성자: ${d.author} &nbsp; ${d.writeDate}</div>` : ''}`;
 }
 
@@ -616,6 +1357,7 @@ async function downloadHWPX() {
       a.remove();
     }, 1000);
     showToast('✅ 다운로드 완료!');
+    saveUsageToCloud(); // 다운로드 성공 시 이번 달 공간 이용실적을 서버에도 저장
   } catch(e) {
     showToast('오류 발생: ' + e.message, true);
     console.error(e);
@@ -711,6 +1453,20 @@ function para(text, style, extraRunContent = '') {
   return `${head}<hp:run charPrIDRef="${style.c}">${extraRunContent}<hp:t>${esc(text)}</hp:t></hp:run></hp:p>`;
 }
 
+// 여러 charPr을 한 문단 안에서 섞어 써야 할 때 (예: "일시/장소" 라벨만 자간을
+// 압축한 별도 charPr을 쓰는 경우). parts는 [{ c: charPrId, text }, ...] 배열.
+function paraRuns(parts, paraPrId) {
+  _paraIdCounter++;
+  const runs = parts.map(p =>
+    p.text ? `<hp:run charPrIDRef="${p.c}"><hp:t>${esc(p.text)}</hp:t></hp:run>` : `<hp:run charPrIDRef="${p.c}"/>`
+  ).join('');
+  return `<hp:p id="${_paraIdCounter}" paraPrIDRef="${paraPrId}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">${runs}</hp:p>`;
+}
+
+// "일시/장소" 라벨은 실제 서식에서 자간 -7%로 압축된 별도 charPr(34)을 써서
+// "대    상"/"주요내용"과 콜론 위치가 맞도록 폭을 맞춘다 (header.xml에서 확인).
+const DATETIME_LABEL_CHARPR = 34;
+
 // 첫 문단의 첫 run에 들어가는 secPr(용지설정)+colPr(단설정).
 // 이 블록은 실제 한글이 만든 hwpx 파일에서 그대로 추출한 내용입니다
 // (손으로 만든 게 아니라 진짜 한글 프로그램이 쓴 XML 원본).
@@ -748,8 +1504,12 @@ function buildSectionXML(d) {
     works.forEach((w, idx) => {
       out += para(` ${w.title}`, STYLE.HEADLINE, composeBoxNum(idx + 1, STYLE.HEADLINE.c));
       if (w.sub)      out += para(`  ➲ ${w.sub}`, STYLE.SUB);
-      if (w.datetime) out += para(` 〇 일시/장소: ${fmtDatetime(w.datetime)}`, STYLE.DATETIME);
-      if (w.target)   out += para(` 〇 대\u00a0\u00a0\u00a0\u00a0상: ${w.target}`, STYLE.TARGET);
+      if (w.datetime) out += paraRuns([
+        { c: STYLE.DATETIME.c, text: ' 〇 ' },
+        { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
+        { c: STYLE.DATETIME.c, text: `: ${fmtDatetime(w.datetime)}` },
+      ], STYLE.DATETIME.p);
+      if (w.target)   out += para(` 〇 대    상: ${w.target}`, STYLE.TARGET);
       if (w.content)  out += para(` 〇 주요내용: ${w.content}`, STYLE.CONTENT);
       if (w.etc)      out += para(` 〇 ${w.etc}`, STYLE.ETC);
       out += para('', STYLE.EMPTY);
@@ -766,8 +1526,12 @@ function buildSectionXML(d) {
       const w = works[0];
       out += para(` ${w.title}`, STYLE.BIZ_HEAD, composeBoxNum(1, STYLE.BIZ_HEAD.c));
       if (w.sub)      out += para(`  ➲ ${w.sub}`, STYLE.SUB);
-      if (w.datetime) out += para(` 〇 일시/장소: ${fmtDatetime(w.datetime)}`, STYLE.BODY);
-      if (w.target)   out += para(` 〇 대\u00a0\u00a0\u00a0\u00a0상: ${w.target}`, STYLE.BODY);
+      if (w.datetime) out += paraRuns([
+        { c: STYLE.BODY.c, text: ' 〇 ' },
+        { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
+        { c: STYLE.BODY.c, text: `: ${fmtDatetime(w.datetime)}` },
+      ], STYLE.BODY.p);
+      if (w.target)   out += para(` 〇 대    상: ${w.target}`, STYLE.BODY);
       if (w.content)  out += para(` 〇 주요내용: ${w.content}`, STYLE.BODY);
       if (w.etc)      out += para(` 〇 ${w.etc}`, STYLE.BODY);
       out += para('', STYLE.EMPTY);
@@ -776,8 +1540,12 @@ function buildSectionXML(d) {
         const ka = KA_LIST[idx] || String(idx + 1);
         out += para(`${ka}. ${w.title}`, STYLE.BIZ_SUB);
         if (w.sub)      out += para(`  ➲ ${w.sub}`, STYLE.SUB);
-        if (w.datetime) out += para(` 〇 일시/장소: ${fmtDatetime(w.datetime)}`, STYLE.BODY);
-        if (w.target)   out += para(` 〇 대\u00a0\u00a0\u00a0\u00a0상: ${w.target}`, STYLE.BODY);
+        if (w.datetime) out += paraRuns([
+          { c: STYLE.BODY.c, text: ' 〇 ' },
+          { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
+          { c: STYLE.BODY.c, text: `: ${fmtDatetime(w.datetime)}` },
+        ], STYLE.BODY.p);
+        if (w.target)   out += para(` 〇 대    상: ${w.target}`, STYLE.BODY);
         if (w.content)  out += para(` 〇 주요내용: ${w.content}`, STYLE.BODY);
         if (w.etc)      out += para(` 〇 ${w.etc}`, STYLE.BODY);
         out += para('', STYLE.EMPTY);
@@ -799,17 +1567,56 @@ function buildSectionXML(d) {
     body += renderBiz(d.bizWorks);
   }
 
-  if (d.usageRows.length) {
+  if (d.usageGroups.length) {
     const totalLabel = d.totalUsers ? `(${d.totalUsers})` : '';
     body += para(`□ 공간 이용실적 ${totalLabel}`.trim(), STYLE.SECTION);
-    // 이용실적: 탭 구분 텍스트 표 (실제 표(hp:tbl) 대신 텍스트 형태로 단순화)
-    const months = ['1월','2월','3월','4월','5월','6월','7월'];
-    body += para(['구분', ...months, '소계'].join('\t'), STYLE.BODY);
-    d.usageRows.forEach(r => {
-      const total = r.months.reduce((s, v) => s + (parseInt(v) || 0), 0);
-      body += para([r.name, ...r.months, total || ''].join('\t'), STYLE.BODY);
+    // 이용실적: 탭 구분 텍스트 표 (실제 표(hp:tbl) 대신 텍스트 형태로 단순화 — 2단계에서 실제 표로 교체 예정)
+    const monthLabels = MONTHS.map(m => `${m}월`);
+    const multi = d.usageGroups.length > 1;
+    d.usageGroups.forEach(grp => {
+      if (grp.spaces.length) {
+        if (multi) body += para(`(${grp.centerName || '센터명 미입력'})`, STYLE.BODY);
+        body += para(['구분', ...monthLabels, '소계'].join('\t'), STYLE.BODY);
+        grp.spaces.forEach(sp => {
+          const monthTotals = MONTHS.map(m => (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0));
+          const total = monthTotals.reduce((s, v) => s + v, 0);
+          body += para([sp.name, ...monthTotals.map(v => v || ''), total || ''].join('\t'), STYLE.BODY);
+        });
+      }
+      if (grp.facilities && grp.facilities.length) {
+        const fsum = sumFacilityUsers(grp.facilities);
+        body += para(`□ 시설대관 이용실적 (연 ${fsum.toLocaleString()}명 이용)`, STYLE.SECTION);
+        grp.facilities.forEach(fac => {
+          body += para(fac.name, STYLE.BODY);
+          body += para(['항목', ...MONTHS.map(m => `${m}월(청소년남/여,외남/여)`)].join('\t'), STYLE.BODY);
+          RENTAL_ROWS.forEach(row => {
+            const cells = MONTHS.map(m => RENTAL_COLS.map(col => parseInt(fac.months[m][row.key][col.key]) || 0).join('/'));
+            body += para([row.label, ...cells].join('\t'), STYLE.BODY);
+          });
+        });
+      }
     });
     body += para('', STYLE.EMPTY);
+  }
+
+  if (d.counselBlocks && d.counselBlocks.length) {
+    d.counselBlocks.forEach(blk => {
+      body += para(`□ 기관 운영실적 (상담) ${blk.period || ''}`.trim(), STYLE.SECTION);
+      COUNSEL_SECTIONS.forEach(section => {
+        const data = blk.sections[section.key] || {};
+        const headlineVal = section.headlineCol
+          ? (parseInt(data.total?.[section.headlineCol]) || 0)
+          : rowTotal(section, data.total);
+        body += para(`${section.no} ${section.title}: 총 ${headlineVal.toLocaleString()}${section.unit}`, STYLE.BODY);
+        const colLabels = section.colGroups.flatMap(g => g.cols.map(c => g.label ? `${g.label}-${c.label}` : c.label));
+        body += para(['구분', ...colLabels].join('\t'), STYLE.BODY);
+        section.rows.forEach(row => {
+          const cells = section.colGroups.flatMap(g => g.cols.map(c => parseInt(data[row.key]?.[c.key]) || 0));
+          body += para([row.label, ...cells.map(v => v || '')].join('\t'), STYLE.BODY);
+        });
+      });
+      body += para('', STYLE.EMPTY);
+    });
   }
 
   if (d.author || d.writeDate) {
@@ -908,11 +1715,22 @@ function showToast(msg, isError=false) {
 window.addEventListener('load', () => {
   addWork('core');
   addWork('org');
-  addUsageRow();
+  addUsageSpace();
+  updateUsageTotalPreview();
   // 오늘 날짜 자동 입력
   const now = new Date();
   document.getElementById('write-date').value =
     `${now.getFullYear()}. ${now.getMonth()+1}. ${now.getDate()}.`;
+
+  // 기관명을 입력하고 다른 곳을 클릭하면 그 기관의 저장된 공간 이용실적을 자동으로 불러옴
+  document.getElementById('dept').addEventListener('blur', loadUsageFromCloud);
+  // 보고 월이 바뀌면 그 달 이전 달만 다시 잠금
+  document.getElementById('month').addEventListener('change', () => {
+    unlockedPastMonths = false;
+    applyMonthLocking();
+  });
+  // 실적 항목 안의 아무 입력값이나 바뀌면 연 누적 인원을 실시간으로 다시 계산
+  document.getElementById('report-items-container').addEventListener('input', updateUsageTotalPreview);
 });
 </script>
 </body>
