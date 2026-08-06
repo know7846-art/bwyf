@@ -1627,13 +1627,22 @@ function buildSectionXML(d) {
 <hs:sec xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0">${body}</hs:sec>`;
 }
 
+// xmlns 선언은 실제 한글이 만든 content.hpf에서 그대로 가져온 것 (우리 쪽에서
+// opf/dc만 선언했다가 한글에서 파일이 계속 로딩만 되고 안 열리는 문제가 있었음)
 function buildHPF(d) {
+  const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<opf:package xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:dc="http://purl.org/dc/elements/1.1/" version="" unique-identifier="" id="">
+<opf:package xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" version="" unique-identifier="" id="">
   <opf:metadata>
     <opf:title>${esc(d.month)}월 월간업무보고 - ${esc(d.dept)}</opf:title>
     <opf:language>ko</opf:language>
-    <opf:meta name="creator" content="text">${esc(d.author)}</opf:meta>
+    <opf:meta name="creator" content="text"/>
+    <opf:meta name="subject" content="text"/>
+    <opf:meta name="description" content="text"/>
+    <opf:meta name="lastsaveby" content="text">${esc(d.author)}</opf:meta>
+    <opf:meta name="CreatedDate" content="text">${now}</opf:meta>
+    <opf:meta name="ModifiedDate" content="text">${now}</opf:meta>
+    <opf:meta name="keyword" content="text"/>
   </opf:metadata>
   <opf:manifest>
     <opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>
