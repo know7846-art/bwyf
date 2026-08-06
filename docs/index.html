@@ -511,6 +511,12 @@ function removeWork(type, n) {
 
 // ─── 공간 이용실적 ───────────────────────────────────────────
 const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+// 공간/시설/상담실적 텍스트 표(2단계에서 hp:tbl로 교체 예정)에서 칸 구분자로 쓴다.
+// 탭 문자(\t)를 <hp:t> 안에 그대로 넣으면 한글이 파일을 열다가 멈추는 문제가
+// 있었다 (실제 문서에서 탭은 텍스트가 아니라 별도 제어 요소여야 하는데,
+// 문자열 안에 raw \t를 섞어 넣어서 발생한 문제로 추정).
+const SEP = '  |  ';
 let unlockedPastMonths = false;
 
 // 카테고리 선택기에서 고른 종류대로 report-items-container에 새 블록을 하나 추가
@@ -1570,17 +1576,17 @@ function buildSectionXML(d) {
   if (d.usageGroups.length) {
     const totalLabel = d.totalUsers ? `(${d.totalUsers})` : '';
     body += para(`□ 공간 이용실적 ${totalLabel}`.trim(), STYLE.SECTION);
-    // 이용실적: 탭 구분 텍스트 표 (실제 표(hp:tbl) 대신 텍스트 형태로 단순화 — 2단계에서 실제 표로 교체 예정)
+    // 이용실적: 구분 텍스트 표 (실제 표(hp:tbl) 대신 텍스트 형태로 단순화 — 2단계에서 실제 표로 교체 예정)
     const monthLabels = MONTHS.map(m => `${m}월`);
     const multi = d.usageGroups.length > 1;
     d.usageGroups.forEach(grp => {
       if (grp.spaces.length) {
         if (multi) body += para(`(${grp.centerName || '센터명 미입력'})`, STYLE.BODY);
-        body += para(['구분', ...monthLabels, '소계'].join('\t'), STYLE.BODY);
+        body += para(['구분', ...monthLabels, '소계'].join(SEP), STYLE.BODY);
         grp.spaces.forEach(sp => {
           const monthTotals = MONTHS.map(m => (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0));
           const total = monthTotals.reduce((s, v) => s + v, 0);
-          body += para([sp.name, ...monthTotals.map(v => v || ''), total || ''].join('\t'), STYLE.BODY);
+          body += para([sp.name, ...monthTotals.map(v => v || 0), total].join(SEP), STYLE.BODY);
         });
       }
       if (grp.facilities && grp.facilities.length) {
@@ -1588,10 +1594,10 @@ function buildSectionXML(d) {
         body += para(`□ 시설대관 이용실적 (연 ${fsum.toLocaleString()}명 이용)`, STYLE.SECTION);
         grp.facilities.forEach(fac => {
           body += para(fac.name, STYLE.BODY);
-          body += para(['항목', ...MONTHS.map(m => `${m}월(청소년남/여,외남/여)`)].join('\t'), STYLE.BODY);
+          body += para(['항목', ...MONTHS.map(m => `${m}월(청소년남/여,외남/여)`)].join(SEP), STYLE.BODY);
           RENTAL_ROWS.forEach(row => {
             const cells = MONTHS.map(m => RENTAL_COLS.map(col => parseInt(fac.months[m][row.key][col.key]) || 0).join('/'));
-            body += para([row.label, ...cells].join('\t'), STYLE.BODY);
+            body += para([row.label, ...cells].join(SEP), STYLE.BODY);
           });
         });
       }
@@ -1609,10 +1615,10 @@ function buildSectionXML(d) {
           : rowTotal(section, data.total);
         body += para(`${section.no} ${section.title}: 총 ${headlineVal.toLocaleString()}${section.unit}`, STYLE.BODY);
         const colLabels = section.colGroups.flatMap(g => g.cols.map(c => g.label ? `${g.label}-${c.label}` : c.label));
-        body += para(['구분', ...colLabels].join('\t'), STYLE.BODY);
+        body += para(['구분', ...colLabels].join(SEP), STYLE.BODY);
         section.rows.forEach(row => {
           const cells = section.colGroups.flatMap(g => g.cols.map(c => parseInt(data[row.key]?.[c.key]) || 0));
-          body += para([row.label, ...cells.map(v => v || '')].join('\t'), STYLE.BODY);
+          body += para([row.label, ...cells].join(SEP), STYLE.BODY);
         });
       });
       body += para('', STYLE.EMPTY);
