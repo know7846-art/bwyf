@@ -512,11 +512,6 @@ function removeWork(type, n) {
 // ─── 공간 이용실적 ───────────────────────────────────────────
 const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 
-// 공간/시설/상담실적 텍스트 표(2단계에서 hp:tbl로 교체 예정)에서 칸 구분자로 쓴다.
-// 탭 문자(\t)를 <hp:t> 안에 그대로 넣으면 한글이 파일을 열다가 멈추는 문제가
-// 있었다 (실제 문서에서 탭은 텍스트가 아니라 별도 제어 요소여야 하는데,
-// 문자열 안에 raw \t를 섞어 넣어서 발생한 문제로 추정).
-const SEP = '  |  ';
 let unlockedPastMonths = false;
 
 // 카테고리 선택기에서 고른 종류대로 report-items-container에 새 블록을 하나 추가
@@ -1424,27 +1419,41 @@ const KA_LIST = ['가','나','다','라','마','바','사','아','자','차'];
 // charPr 40: HY헤드라인M 18pt #231E7E → □ 섹션 제목 (진남색)
 // charPr 16: HY헤드라인M 16pt         → 업무 헤드라인
 // charPr 52: 한양중고딕 13pt          → ➲ 부연설명
-// charPr 27: 휴먼명조 15pt            → 〇 일시/장소·대상·주요내용 본문
-// charPr 33: 휴먼명조 15pt            → 주요내용 본문(내용 텍스트)
-// charPr 29: 휴먼명조 15pt            → 사업운영 가/나 항목명
-
+// charPr 27: 휴먼명조 15pt 자간 0     → 〇 일시/장소·대상·주요내용 라벨
+// charPr 33: 휴먼명조 15pt 자간 -2%   → 주요내용 실제 입력값 텍스트 (라벨과 자간이 다름!)
+// charPr 29: 휴먼명조 15pt bold       → 사업운영 가/나 항목명
+//
+// 주의: paraPr은 "같은 역할이라도 섹션마다 다른 ID"를 쓰는 경우가 실제 양식에 있다
+// (문서 첫 섹션 제목만 줄간격 150%, 이후 섹션은 160% 등). 원본 파일을 다시 정밀
+// 대조해서 확인된 것만 아래에 반영함 — 대충 재사용하면 줄간격/자간이 미묘하게 달라진다.
 const STYLE = {
   SECPR:     { p: 2,  c: 14 }, // secPr 담는 첫 단락 (paraPr=2: RIGHT 정렬)
   EMPTY_SM:  { p: 20, c: 22 }, // 구분용 초소형 빈 줄 (2pt)
   EMPTY:     { p: 20, c: 14 }, // 일반 빈 줄 (10pt 바탕)
   TITLE:     { p: 56, c: 26 }, // 문서 제목 — CENTER, HY헤드라인M 35pt
   DEPT:      { p: 2,  c: 14 }, // 부서명 — RIGHT (paraPr=2), 바탕 10pt
-  SECTION:   { p: 57, c: 40 }, // □ 섹션 제목 — LEFT, HY헤드라인M 18pt 진남색
+  SECTION:       { p: 57, c: 40 }, // □ 섹션 제목 (2번째 이후) — 줄간격 160%
+  SECTION_FIRST: { p: 61, c: 40 }, // □ 섹션 제목 (문서에서 가장 먼저 나오는 섹션) — 줄간격 150%
   HEADLINE:  { p: 20, c: 16 }, // 업무 항목 헤드라인 — HY헤드라인M 16pt
   BIZ_HEAD:  { p: 21, c: 16 }, // 사업운영 메인 헤드라인 (paraPr=21: LEFT)
-  BIZ_SUB:   { p: 66, c: 29 }, // 사업운영 가/나/다 항목명 — 휴먼명조 15pt
+  BIZ_SUB_FIRST: { p: 66, c: 29 }, // 사업운영 가/나/다 항목명 (그 □N의 첫 항목 "가.")
+  BIZ_SUB:       { p: 65, c: 29 }, // 사업운영 가/나/다 항목명 (두 번째 이후 "나." "다." …)
   SUB:       { p: 73, c: 52 }, // ➲ 부연설명 — 한양중고딕 13pt
-  DATETIME:  { p: 58, c: 27 }, // 〇 일시/장소 — 휴먼명조 15pt
-  TARGET:    { p: 59, c: 27 }, // 〇 대    상 — 휴먼명조 15pt
-  CONTENT:   { p: 60, c: 27 }, // 〇 주요내용 — 휴먼명조 15pt
-  ETC:       { p: 59, c: 27 }, // 〇 기타 항목 — 휴먼명조 15pt
-  BODY:      { p: 50, c: 27 }, // 일반 본문 — 휴먼명조 15pt
+  // 핵심주요업무(coreWorks)
+  DATETIME:  { p: 58, c: 27 }, // 〇 일시/장소
+  TARGET:    { p: 59, c: 27 }, // 〇 대    상
+  CONTENT:   { p: 60, c: 27 }, // 〇 주요내용 (라벨)
+  ETC:       { p: 59, c: 27 }, // 〇 기타 항목
+  // 기관운영(orgWorks) — 핵심주요업무와 paraPr이 다르다 (실제 양식 원본에서 확인)
+  ORG_DATETIME: { p: 59, c: 27 }, // 〇 일시/장소
+  ORG_TARGET:   { p: 59, c: 27 }, // 〇 대    상
+  ORG_CONTENT:  { p: 62, c: 27 }, // 〇 주요내용 (라벨)
+  BODY:      { p: 50, c: 27 }, // 일반 본문(사업운영 가/나 하위 항목) — 휴먼명조 15pt
 };
+
+// "〇 주요내용:" 라벨 자체는 charPr=27(자간 0)이지만, 그 뒤에 실제로 입력하는
+// 값 텍스트는 charPr=33(자간 -2%)을 쓴다 — 실제 양식 원본(기관운영 예시)에서 확인.
+const CONTENT_VALUE_CHARPR = 33;
 
 // 문서 내 모든 문단은 고유 id가 있어야 하므로 빌드할 때마다 카운터를 새로 둠
 let _paraIdCounter = 1000000000;
@@ -1473,6 +1482,60 @@ function paraRuns(parts, paraPrId) {
 // "대    상"/"주요내용"과 콜론 위치가 맞도록 폭을 맞춘다 (header.xml에서 확인).
 const DATETIME_LABEL_CHARPR = 34;
 
+// ── 이용실적/대관실적/상담 표: 진짜 <hp:tbl> 빌더 ───────────────────────
+// 예전엔 탭 문자(\t)로 이어붙인 텍스트 한 줄을 표처럼 흉내냈는데, 그 탭 문자가
+// 한글에서 파일이 안 열리는 원인이었다. 파이프(|) 문자로 바꿔서 여는 문제는
+// 해결됐지만 그건 여전히 진짜 표가 아니라 텍스트였다. 진짜 <hp:tbl> 구조는
+// 실제 한글이 만든 표(원본 hwpx 샘플의 표지 로고+제목 표)를 그대로 뜯어봐서
+// 확인한 것:
+//   <hp:p><hp:run><hp:tbl ...><hp:sz/><hp:pos treatAsChar="1" .../>
+//     <hp:outMargin/><hp:inMargin/>
+//     <hp:tr><hp:tc ...><hp:subList ...><hp:p>...</hp:p></hp:subList>
+//       <hp:cellAddr/><hp:cellSpan/><hp:cellSz/><hp:cellMargin/></hp:tc>...</hp:tr>
+//   ...</hp:tbl><hp:t/></hp:run></hp:p>
+// paraPr=42(가운데+가운데 정렬, 여백 0), charPr=6(맑은고딕 10pt), borderFillIDRef=3
+// (사방 실선)은 header.xml에서 확인한 값.
+const TBL_PARAPR = 42;
+const TBL_CHARPR = 6;
+const TBL_BORDERFILL = 3;
+const TABLE_TOTAL_WIDTH = 47600; // 본문 폭(용지폭 - 좌우여백)에 맞춘 표 전체 너비, HWPUNIT
+
+let _tblIdCounter = 2000000000;
+
+// 첫 칸만 너비를 지정하고 나머지 칸은 남은 폭을 균등하게 나눠 가짐 (마지막 칸이 나머지 반올림 오차 흡수)
+function evenColWidths(count, firstWidth, totalWidth = TABLE_TOTAL_WIDTH) {
+  const rest = totalWidth - firstWidth;
+  const each = Math.floor(rest / (count - 1));
+  const widths = [firstWidth];
+  for (let i = 0; i < count - 2; i++) widths.push(each);
+  widths.push(rest - each * (count - 2));
+  return widths;
+}
+
+// rows: 텍스트 2차원 배열 (첫 행은 헤더로 취급). colWidths.length === 각 행의 칸 수.
+// 표 전체를 담는 문단(anchor paragraph) XML을 반환한다 (body에 바로 이어붙이면 됨).
+function buildTableXML(rows, colWidths, rowHeight = 1200) {
+  const colCount = colWidths.length;
+  const rowCount = rows.length;
+  const totalWidth = colWidths.reduce((a, b) => a + b, 0);
+  const totalHeight = rowHeight * rowCount;
+  _tblIdCounter++;
+  let trs = '';
+  rows.forEach((cells, r) => {
+    let tcs = '';
+    cells.forEach((cellText, c) => {
+      _paraIdCounter++;
+      const t = (cellText === '' || cellText == null) ? '' : `<hp:t>${esc(String(cellText))}</hp:t>`;
+      const p = `<hp:p id="${_paraIdCounter}" paraPrIDRef="${TBL_PARAPR}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${TBL_CHARPR}">${t}</hp:run></hp:p>`;
+      tcs += `<hp:tc name="" header="${r === 0 ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${TBL_BORDERFILL}"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${p}</hp:subList><hp:cellAddr colAddr="${c}" rowAddr="${r}"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${colWidths[c]}" height="${rowHeight}"/><hp:cellMargin left="141" right="141" top="99" bottom="99"/></hp:tc>`;
+    });
+    trs += `<hp:tr>${tcs}</hp:tr>`;
+  });
+  const tblXML = `<hp:tbl id="${_tblIdCounter}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rowCount}" colCnt="${colCount}" cellSpacing="0" borderFillIDRef="${TBL_BORDERFILL}" noAdjust="0"><hp:sz width="${totalWidth}" widthRelTo="ABSOLUTE" height="${totalHeight}" heightRelTo="ABSOLUTE" protect="0"/><hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/><hp:outMargin left="0" right="0" top="141" bottom="141"/><hp:inMargin left="141" right="141" top="141" bottom="141"/>${trs}</hp:tbl>`;
+  _paraIdCounter++;
+  return `<hp:p id="${_paraIdCounter}" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="14">${tblXML}<hp:t/></hp:run></hp:p>`;
+}
+
 // 첫 문단의 첫 run에 들어가는 secPr(용지설정)+colPr(단설정).
 // 이 블록은 실제 한글이 만든 hwpx 파일에서 그대로 추출한 내용입니다
 // (손으로 만든 게 아니라 진짜 한글 프로그램이 쓴 XML 원본).
@@ -1496,28 +1559,40 @@ function buildSectionXML(d) {
   body += para('', STYLE.EMPTY);
   body += para(d.dept, STYLE.DEPT);
 
-  // ── 핵심 주요업무 / 기관운영 공통 렌더러 ─────────────────────────
-  // paraPr=20 charPr=16: 업무 헤드라인 (HY헤드라인M 16pt)
-  // paraPr=73 charPr=52: ➲ 부연설명 (한양중고딕 13pt)
-  // paraPr=58 charPr=27: 〇 일시/장소 (휴먼명조 15pt)
-  // paraPr=59 charPr=27: 〇 대    상  (휴먼명조 15pt)
-  // paraPr=60 charPr=27: 〇 주요내용  (휴먼명조 15pt)
-  // 서식 안내사항의 "□1 □2 □3 …" 글머리 번호 (섹션마다 1부터 다시 시작)
+  // ── 섹션 제목: 문서에서 맨 처음 나오는 "□ ..." 제목만 줄간격이 다르다
+  // (paraPr=61, 150%) — 이후 섹션 제목은 전부 paraPr=57(160%). 실제 양식
+  // 원본을 대조해서 확인한 차이라 그대로 반영한다.
+  let firstSectionDone = false;
+  const sectionTitle = (text) => {
+    const style = firstSectionDone ? STYLE.SECTION : STYLE.SECTION_FIRST;
+    firstSectionDone = true;
+    return para(text, style);
+  };
+
+  // "〇 주요내용: " 라벨(charPr=27)과 실제 값(charPr=33, 자간 -2%)을 분리해서 쓴다.
+  const contentPara = (value, labelStyle) => paraRuns([
+    { c: labelStyle.c, text: ' 〇 주요내용: ' },
+    { c: CONTENT_VALUE_CHARPR, text: value },
+  ], labelStyle.p);
+
+  const datetimePara = (value, style) => paraRuns([
+    { c: style.c, text: ' 〇 ' },
+    { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
+    { c: style.c, text: `: ${fmtDatetime(value)}` },
+  ], style.p);
 
   // ── 핵심주요업무 / 기관운영 렌더러 ──────────────────────────────
-  const renderCoreOrg = (works) => {
+  // 핵심주요업무와 기관운영은 겉보기엔 같아 보여도 실제 양식 원본에서 서로
+  // 다른 paraPr을 쓰기 때문에 styleSet으로 분리해서 받는다.
+  const renderCoreOrg = (works, styleSet) => {
     let out = '';
     works.forEach((w, idx) => {
       out += para(` ${w.title}`, STYLE.HEADLINE, composeBoxNum(idx + 1, STYLE.HEADLINE.c));
       if (w.sub)      out += para(`  ➲ ${w.sub}`, STYLE.SUB);
-      if (w.datetime) out += paraRuns([
-        { c: STYLE.DATETIME.c, text: ' 〇 ' },
-        { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
-        { c: STYLE.DATETIME.c, text: `: ${fmtDatetime(w.datetime)}` },
-      ], STYLE.DATETIME.p);
-      if (w.target)   out += para(` 〇 대    상: ${w.target}`, STYLE.TARGET);
-      if (w.content)  out += para(` 〇 주요내용: ${w.content}`, STYLE.CONTENT);
-      if (w.etc)      out += para(` 〇 ${w.etc}`, STYLE.ETC);
+      if (w.datetime) out += datetimePara(w.datetime, styleSet.datetime);
+      if (w.target)   out += para(` 〇 대    상: ${w.target}`, styleSet.target);
+      if (w.content)  out += contentPara(w.content, styleSet.content);
+      if (w.etc)      out += para(` 〇 ${w.etc}`, styleSet.target);
       out += para('', STYLE.EMPTY);
     });
     return out;
@@ -1525,34 +1600,26 @@ function buildSectionXML(d) {
 
   // ── 사업운영 렌더러 (□1 □2 … + 가/나/다 조합) ──────────────────────
   // 항목이 하나: □1 단독 헤드라인
-  // 항목이 여럿: □1 대표 제목 아래 가. 나. 다. 세부 항목
+  // 항목이 여럿: □1 대표 제목 아래 가. 나. 다. 세부 항목 (가.만 paraPr이 다름)
   const renderBiz = (works) => {
     let out = '';
     if (works.length === 1) {
       const w = works[0];
       out += para(` ${w.title}`, STYLE.BIZ_HEAD, composeBoxNum(1, STYLE.BIZ_HEAD.c));
       if (w.sub)      out += para(`  ➲ ${w.sub}`, STYLE.SUB);
-      if (w.datetime) out += paraRuns([
-        { c: STYLE.BODY.c, text: ' 〇 ' },
-        { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
-        { c: STYLE.BODY.c, text: `: ${fmtDatetime(w.datetime)}` },
-      ], STYLE.BODY.p);
+      if (w.datetime) out += datetimePara(w.datetime, STYLE.BODY);
       if (w.target)   out += para(` 〇 대    상: ${w.target}`, STYLE.BODY);
-      if (w.content)  out += para(` 〇 주요내용: ${w.content}`, STYLE.BODY);
+      if (w.content)  out += contentPara(w.content, STYLE.BODY);
       if (w.etc)      out += para(` 〇 ${w.etc}`, STYLE.BODY);
       out += para('', STYLE.EMPTY);
     } else {
       works.forEach((w, idx) => {
         const ka = KA_LIST[idx] || String(idx + 1);
-        out += para(`${ka}. ${w.title}`, STYLE.BIZ_SUB);
+        out += para(`${ka}. ${w.title}`, idx === 0 ? STYLE.BIZ_SUB_FIRST : STYLE.BIZ_SUB);
         if (w.sub)      out += para(`  ➲ ${w.sub}`, STYLE.SUB);
-        if (w.datetime) out += paraRuns([
-          { c: STYLE.BODY.c, text: ' 〇 ' },
-          { c: DATETIME_LABEL_CHARPR, text: '일시/장소' },
-          { c: STYLE.BODY.c, text: `: ${fmtDatetime(w.datetime)}` },
-        ], STYLE.BODY.p);
+        if (w.datetime) out += datetimePara(w.datetime, STYLE.BODY);
         if (w.target)   out += para(` 〇 대    상: ${w.target}`, STYLE.BODY);
-        if (w.content)  out += para(` 〇 주요내용: ${w.content}`, STYLE.BODY);
+        if (w.content)  out += contentPara(w.content, STYLE.BODY);
         if (w.etc)      out += para(` 〇 ${w.etc}`, STYLE.BODY);
         out += para('', STYLE.EMPTY);
       });
@@ -1561,44 +1628,48 @@ function buildSectionXML(d) {
   };
 
   if (d.coreWorks.length) {
-    body += para('□ 월간 핵심 주요업무', STYLE.SECTION);
-    body += renderCoreOrg(d.coreWorks);
+    body += sectionTitle('□ 월간 핵심 주요업무');
+    body += renderCoreOrg(d.coreWorks, { datetime: STYLE.DATETIME, target: STYLE.TARGET, content: STYLE.CONTENT });
   }
   if (d.orgWorks.length) {
-    body += para('□ 기관운영', STYLE.SECTION);
-    body += renderCoreOrg(d.orgWorks);
+    body += sectionTitle('□ 기관운영');
+    body += renderCoreOrg(d.orgWorks, { datetime: STYLE.ORG_DATETIME, target: STYLE.ORG_TARGET, content: STYLE.ORG_CONTENT });
   }
   if (d.bizWorks.length) {
-    body += para('□ 사업운영', STYLE.SECTION);
+    body += sectionTitle('□ 사업운영');
     body += renderBiz(d.bizWorks);
   }
 
   if (d.usageGroups.length) {
     const totalLabel = d.totalUsers ? `(${d.totalUsers})` : '';
-    body += para(`□ 공간 이용실적 ${totalLabel}`.trim(), STYLE.SECTION);
-    // 이용실적: 구분 텍스트 표 (실제 표(hp:tbl) 대신 텍스트 형태로 단순화 — 2단계에서 실제 표로 교체 예정)
+    body += sectionTitle(`□ 공간 이용실적 ${totalLabel}`.trim());
     const monthLabels = MONTHS.map(m => `${m}월`);
     const multi = d.usageGroups.length > 1;
     d.usageGroups.forEach(grp => {
       if (grp.spaces.length) {
         if (multi) body += para(`(${grp.centerName || '센터명 미입력'})`, STYLE.BODY);
-        body += para(['구분', ...monthLabels, '소계'].join(SEP), STYLE.BODY);
-        grp.spaces.forEach(sp => {
+        const headerRow = ['구분', ...monthLabels, '소계'];
+        const dataRows = grp.spaces.map(sp => {
           const monthTotals = MONTHS.map(m => (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0));
           const total = monthTotals.reduce((s, v) => s + v, 0);
-          body += para([sp.name, ...monthTotals.map(v => v || 0), total].join(SEP), STYLE.BODY);
+          return [sp.name, ...monthTotals, total];
         });
+        body += buildTableXML([headerRow, ...dataRows], evenColWidths(headerRow.length, 6800));
+        body += para('', STYLE.EMPTY_SM);
       }
       if (grp.facilities && grp.facilities.length) {
         const fsum = sumFacilityUsers(grp.facilities);
-        body += para(`□ 시설대관 이용실적 (연 ${fsum.toLocaleString()}명 이용)`, STYLE.SECTION);
+        body += sectionTitle(`□ 시설대관 이용실적 (연 ${fsum.toLocaleString()}명 이용)`);
         grp.facilities.forEach(fac => {
           body += para(fac.name, STYLE.BODY);
-          body += para(['항목', ...MONTHS.map(m => `${m}월(청소년남/여,외남/여)`)].join(SEP), STYLE.BODY);
-          RENTAL_ROWS.forEach(row => {
+          body += para(' ※ 각 월 칸은 유료대관/무료대관 순, 칸 안 숫자는 청소년남/청소년여/청소년외남/청소년외여 인원', STYLE.SUB);
+          const headerRow = ['항목', ...monthLabels];
+          const dataRows = RENTAL_ROWS.map(row => {
             const cells = MONTHS.map(m => RENTAL_COLS.map(col => parseInt(fac.months[m][row.key][col.key]) || 0).join('/'));
-            body += para([row.label, ...cells].join(SEP), STYLE.BODY);
+            return [row.label, ...cells];
           });
+          body += buildTableXML([headerRow, ...dataRows], evenColWidths(headerRow.length, 5200));
+          body += para('', STYLE.EMPTY_SM);
         });
       }
     });
@@ -1607,7 +1678,7 @@ function buildSectionXML(d) {
 
   if (d.counselBlocks && d.counselBlocks.length) {
     d.counselBlocks.forEach(blk => {
-      body += para(`□ 기관 운영실적 (상담) ${blk.period || ''}`.trim(), STYLE.SECTION);
+      body += sectionTitle(`□ 기관 운영실적 (상담) ${blk.period || ''}`.trim());
       COUNSEL_SECTIONS.forEach(section => {
         const data = blk.sections[section.key] || {};
         const headlineVal = section.headlineCol
@@ -1615,11 +1686,13 @@ function buildSectionXML(d) {
           : rowTotal(section, data.total);
         body += para(`${section.no} ${section.title}: 총 ${headlineVal.toLocaleString()}${section.unit}`, STYLE.BODY);
         const colLabels = section.colGroups.flatMap(g => g.cols.map(c => g.label ? `${g.label}-${c.label}` : c.label));
-        body += para(['구분', ...colLabels].join(SEP), STYLE.BODY);
-        section.rows.forEach(row => {
+        const headerRow = ['구분', ...colLabels];
+        const dataRows = section.rows.map(row => {
           const cells = section.colGroups.flatMap(g => g.cols.map(c => parseInt(data[row.key]?.[c.key]) || 0));
-          body += para([row.label, ...cells].join(SEP), STYLE.BODY);
+          return [row.label, ...cells];
         });
+        body += buildTableXML([headerRow, ...dataRows], evenColWidths(headerRow.length, 5200));
+        body += para('', STYLE.EMPTY_SM);
       });
       body += para('', STYLE.EMPTY);
     });
