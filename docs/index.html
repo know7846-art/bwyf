@@ -1512,7 +1512,11 @@ function evenColWidths(count, firstWidth, totalWidth = TABLE_TOTAL_WIDTH) {
   return widths;
 }
 
-// rows: 텍스트 2차원 배열 (첫 행은 헤더로 취급). colWidths.length === 각 행의 칸 수.
+// rows: 2차원 배열, 각 칸은 문자열/숫자 그대로 쓰거나 병합이 필요하면
+// { text, colSpan, rowSpan, header } 형태로 쓸 수 있다 (rowSpan으로 위에서
+// 이미 덮인 칸은 그 행의 배열에 아예 넣지 않으면 됨 — 실제 HWP 표도 병합된
+// 칸은 <hp:tc> 자체가 하나만 나오고 나머지 칸은 생략되는 구조라 동일하게 맞춤).
+// colWidths.length === 표의 실제 물리적 칸 수(병합 전 기준).
 // 표 전체를 담는 문단(anchor paragraph) XML을 반환한다 (body에 바로 이어붙이면 됨).
 function buildTableXML(rows, colWidths, rowHeight = 1200) {
   const colCount = colWidths.length;
@@ -1520,20 +1524,128 @@ function buildTableXML(rows, colWidths, rowHeight = 1200) {
   const totalWidth = colWidths.reduce((a, b) => a + b, 0);
   const totalHeight = rowHeight * rowCount;
   _tblIdCounter++;
+  const occupied = Array.from({ length: rowCount }, () => Array(colCount).fill(false));
   let trs = '';
   rows.forEach((cells, r) => {
     let tcs = '';
-    cells.forEach((cellText, c) => {
+    let colPtr = 0;
+    cells.forEach(raw => {
+      const cell = (raw !== null && typeof raw === 'object') ? raw : { text: raw };
+      while (colPtr < colCount && occupied[r][colPtr]) colPtr++;
+      const colSpan = cell.colSpan || 1;
+      const rowSpan = cell.rowSpan || 1;
+      for (let rr = r; rr < r + rowSpan && rr < rowCount; rr++) {
+        for (let cc = colPtr; cc < colPtr + colSpan && cc < colCount; cc++) occupied[rr][cc] = true;
+      }
+      const width = colWidths.slice(colPtr, colPtr + colSpan).reduce((a, b) => a + b, 0);
+      const height = rowHeight * rowSpan;
       _paraIdCounter++;
-      const t = (cellText === '' || cellText == null) ? '' : `<hp:t>${esc(String(cellText))}</hp:t>`;
+      const text = cell.text;
+      const t = (text === '' || text == null) ? '' : `<hp:t>${esc(String(text))}</hp:t>`;
       const p = `<hp:p id="${_paraIdCounter}" paraPrIDRef="${TBL_PARAPR}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${TBL_CHARPR}">${t}</hp:run></hp:p>`;
-      tcs += `<hp:tc name="" header="${r === 0 ? 1 : 0}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${TBL_BORDERFILL}"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${p}</hp:subList><hp:cellAddr colAddr="${c}" rowAddr="${r}"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${colWidths[c]}" height="${rowHeight}"/><hp:cellMargin left="141" right="141" top="99" bottom="99"/></hp:tc>`;
+      const header = (cell.header || r === 0) ? 1 : 0;
+      tcs += `<hp:tc name="" header="${header}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${TBL_BORDERFILL}"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">${p}</hp:subList><hp:cellAddr colAddr="${colPtr}" rowAddr="${r}"/><hp:cellSpan colSpan="${colSpan}" rowSpan="${rowSpan}"/><hp:cellSz width="${width}" height="${height}"/><hp:cellMargin left="141" right="141" top="99" bottom="99"/></hp:tc>`;
+      colPtr += colSpan;
     });
     trs += `<hp:tr>${tcs}</hp:tr>`;
   });
   const tblXML = `<hp:tbl id="${_tblIdCounter}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rowCount}" colCnt="${colCount}" cellSpacing="0" borderFillIDRef="${TBL_BORDERFILL}" noAdjust="0"><hp:sz width="${totalWidth}" widthRelTo="ABSOLUTE" height="${totalHeight}" heightRelTo="ABSOLUTE" protect="0"/><hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/><hp:outMargin left="0" right="0" top="141" bottom="141"/><hp:inMargin left="141" right="141" top="141" bottom="141"/>${trs}</hp:tbl>`;
   _paraIdCounter++;
   return `<hp:p id="${_paraIdCounter}" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="14">${tblXML}<hp:t/></hp:run></hp:p>`;
+}
+
+// MONTHS를 절반(1~6월 / 7~12월)으로 쪼갠다 — 실제 양식 원본도 한 표에 12개월을
+// 다 넣지 않고 반기 단위로 표를 나눠서 칸이 너무 좁아지는 걸 피한다.
+const MONTH_HALVES = [MONTHS.slice(0, 6), MONTHS.slice(6, 12)];
+
+// 공간 이용실적: 입력폼/미리보기와 완전히 같은 3개 표(공간별 이용실적 / 공간
+// 이용실적 총합 / 총 누계 및 목표대비실적)를 실제 표(hp:tbl)로 만든다.
+// (buildUsageTablesForSpaces의 HTML 버전과 행/열 구조가 1:1로 대응됨)
+function buildUsageSpaceTablesXML(spaces) {
+  let out = '';
+  const monthHeaderRows = (months) => [
+    [{ text: '구분', rowSpan: 2 }, ...months.map(m => ({ text: `${m}월`, colSpan: 2 }))],
+    months.flatMap(() => ['남', '여']),
+  ];
+  const spaceRows = (name, monthsData, months) => [
+    [{ text: name, rowSpan: 2 }, { text: '인원(명)' }, ...months.flatMap(m => [
+      parseInt(monthsData[m].male) || 0, parseInt(monthsData[m].female) || 0,
+    ])],
+    [{ text: '운영일수(일)' }, ...months.map(m => ({ text: parseInt(monthsData[m].days) || 0, colSpan: 2 }))],
+  ];
+
+  // 표1: 공간별 이용실적 (반기별로 표를 나눔)
+  out += para('공간별 이용실적', STYLE.BODY);
+  MONTH_HALVES.forEach(months => {
+    const colCount = 1 + months.length * 2;
+    const rows = [...monthHeaderRows(months), ...spaces.flatMap(sp => spaceRows(sp.name, sp.months, months))];
+    out += buildTableXML(rows, evenColWidths(colCount, 5800));
+    out += para('', STYLE.EMPTY_SM);
+  });
+
+  // 표2: 공간 이용실적 총합 (해당 센터 내 모든 공간의 월별 합계)
+  const totalMonths = {};
+  MONTHS.forEach(m => {
+    totalMonths[m] = {
+      male: spaces.reduce((s, sp) => s + (parseInt(sp.months[m].male) || 0), 0),
+      female: spaces.reduce((s, sp) => s + (parseInt(sp.months[m].female) || 0), 0),
+      days: spaces.reduce((s, sp) => s + (parseInt(sp.months[m].days) || 0), 0),
+    };
+  });
+  out += para('공간 이용실적 총합', STYLE.BODY);
+  MONTH_HALVES.forEach(months => {
+    const colCount = 1 + months.length * 2;
+    const rows = [...monthHeaderRows(months), ...spaceRows('합계', totalMonths, months)];
+    out += buildTableXML(rows, evenColWidths(colCount, 5800));
+    out += para('', STYLE.EMPTY_SM);
+  });
+
+  // 표3: 총 누계 및 목표대비실적 (공간별 목표 대비 누계실적/달성도)
+  out += para('총 누계 및 목표대비실적', STYLE.BODY);
+  const table3Header = [['공간 명', { text: '구분 (인원)', colSpan: 2 }, { text: '구분 (운영일수)', colSpan: 2 }]];
+  const table3Rows = spaces.flatMap(sp => {
+    const popSum = MONTHS.reduce((s, m) => s + (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0), 0);
+    const daySum = MONTHS.reduce((s, m) => s + (parseInt(sp.months[m].days) || 0), 0);
+    const targetPop = parseInt(sp.targetPop) || 0;
+    const targetDays = parseInt(sp.targetDays) || 0;
+    const popRate = targetPop ? (popSum / targetPop * 100).toFixed(2) : '0.00';
+    const dayRate = targetDays ? (daySum / targetDays * 100).toFixed(2) : '0.00';
+    return [
+      [{ text: sp.name, rowSpan: 3 }, '목표', targetPop, '목표', targetDays],
+      ['누계실적', popSum, '누계실적', daySum],
+      ['달성도(%)', popRate, '달성도(%)', dayRate],
+    ];
+  });
+  out += buildTableXML([...table3Header, ...table3Rows], evenColWidths(5, 8600));
+  out += para('', STYLE.EMPTY_SM);
+
+  return out;
+}
+
+// 시설대관 이용실적: 유료/무료대관 x 청소년/청소년 외 x 남/여, 반기별로 표를 나눔
+// (buildFacilityTableHTML의 HTML 버전과 행/열 구조가 1:1로 대응됨)
+function buildFacilityTableXML(fac) {
+  let out = '';
+  MONTH_HALVES.forEach(months => {
+    const header = [
+      [{ text: '항목', rowSpan: 3 }, ...months.map(m => ({ text: `${m}월`, colSpan: 4 }))],
+      months.flatMap(() => [{ text: '청소년', colSpan: 2 }, { text: '청소년 외', colSpan: 2 }]),
+      months.flatMap(() => ['남', '여', '남', '여']),
+    ];
+    const dataRow = (rowKey, label) => [label, ...months.flatMap(m =>
+      RENTAL_COLS.map(col => parseInt(fac.months[m][rowKey][col.key]) || 0))];
+    const subtotalRow = ['소계', ...months.flatMap(m =>
+      RENTAL_COLS.map(col => RENTAL_ROWS.reduce((s, row) => s + (parseInt(fac.months[m][row.key][col.key]) || 0), 0)))];
+    const totalRow = ['합계', ...months.map(m => ({
+      text: RENTAL_ROWS.reduce((s, row) => s + RENTAL_COLS.reduce((ss, col) => ss + (parseInt(fac.months[m][row.key][col.key]) || 0), 0), 0),
+      colSpan: 4,
+    }))];
+    const colCount = 1 + months.length * 4;
+    const rows = [...header, dataRow('paid', '유료대관'), dataRow('free', '무료대관'), subtotalRow, totalRow];
+    out += buildTableXML(rows, evenColWidths(colCount, 4200));
+    out += para('', STYLE.EMPTY_SM);
+  });
+  return out;
 }
 
 // 첫 문단의 첫 run에 들어가는 secPr(용지설정)+colPr(단설정).
@@ -1643,33 +1755,18 @@ function buildSectionXML(d) {
   if (d.usageGroups.length) {
     const totalLabel = d.totalUsers ? `(${d.totalUsers})` : '';
     body += sectionTitle(`□ 공간 이용실적 ${totalLabel}`.trim());
-    const monthLabels = MONTHS.map(m => `${m}월`);
     const multi = d.usageGroups.length > 1;
     d.usageGroups.forEach(grp => {
       if (grp.spaces.length) {
         if (multi) body += para(`(${grp.centerName || '센터명 미입력'})`, STYLE.BODY);
-        const headerRow = ['구분', ...monthLabels, '소계'];
-        const dataRows = grp.spaces.map(sp => {
-          const monthTotals = MONTHS.map(m => (parseInt(sp.months[m].male) || 0) + (parseInt(sp.months[m].female) || 0));
-          const total = monthTotals.reduce((s, v) => s + v, 0);
-          return [sp.name, ...monthTotals, total];
-        });
-        body += buildTableXML([headerRow, ...dataRows], evenColWidths(headerRow.length, 6800));
-        body += para('', STYLE.EMPTY_SM);
+        body += buildUsageSpaceTablesXML(grp.spaces);
       }
       if (grp.facilities && grp.facilities.length) {
         const fsum = sumFacilityUsers(grp.facilities);
         body += sectionTitle(`□ 시설대관 이용실적 (연 ${fsum.toLocaleString()}명 이용)`);
         grp.facilities.forEach(fac => {
           body += para(fac.name, STYLE.BODY);
-          body += para(' ※ 각 월 칸은 유료대관/무료대관 순, 칸 안 숫자는 청소년남/청소년여/청소년외남/청소년외여 인원', STYLE.SUB);
-          const headerRow = ['항목', ...monthLabels];
-          const dataRows = RENTAL_ROWS.map(row => {
-            const cells = MONTHS.map(m => RENTAL_COLS.map(col => parseInt(fac.months[m][row.key][col.key]) || 0).join('/'));
-            return [row.label, ...cells];
-          });
-          body += buildTableXML([headerRow, ...dataRows], evenColWidths(headerRow.length, 5200));
-          body += para('', STYLE.EMPTY_SM);
+          body += buildFacilityTableXML(fac);
         });
       }
     });
